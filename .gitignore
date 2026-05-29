@@ -1,0 +1,18 @@
+# Vídeos (grandes demais para o GitHub — carregados pela interface)
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wmv
+
+# Arquivos temporários e de sistema
+__pycache__/
+*.pyc
+*.xlsx
+.DS_Store
+Thumbs.db
+
+# Notebook e rascunhos (não precisam ir para o deploy)
+claudio2025Agosto.ipynb
+prompt completo para o programa.txt
+.claude/
