@@ -220,42 +220,52 @@ if st.button("🚀 Iniciar Processamento", type="primary", use_container_width=T
 
     cap_proc = cv2.VideoCapture(video_path)
 
-    for step, fidx in enumerate(frame_idxs):
-        cap_proc.set(cv2.CAP_PROP_POS_FRAMES, fidx)
-        ret_f, frame = cap_proc.read()
-        if not ret_f:
+    # Leitura SEQUENCIAL com grab(): pula frames sem decodificar (rápido) e só
+    # decodifica (retrieve) os frames amostrados. Evita o seek caro do cap.set().
+    target_set = set(frame_idxs)
+    next_target_i = 0
+    cur_frame = 0
+    # Atualiza o gráfico ao vivo no máximo ~25 vezes no total (leve)
+    plot_every = max(1, n_steps // 25)
+
+    while next_target_i < n_steps:
+        if not cap_proc.grab():
             break
+        if cur_frame in target_set:
+            ret_f, frame = cap_proc.retrieve()
+            if not ret_f:
+                break
+            t = cur_frame / fps
+            try:
+                frac = calcular_altura_raw(frame, crop_left, crop_right, y1, y2, gray_min, gray_max)
+                fracoes_raw.append(frac)
+                tempos_raw.append(t)
+            except Exception:
+                pass
 
-        t = fidx / fps
-        try:
-            frac = calcular_altura_raw(frame, crop_left, crop_right, y1, y2, gray_min, gray_max)
-            fracoes_raw.append(frac)
-            tempos_raw.append(t)
-        except Exception:
-            pass
+            step = next_target_i
+            # Curva ao vivo (esparsa, para não pesar)
+            if (step % plot_every == 0 or step == n_steps - 1) and len(fracoes_raw) > frames_ignorar + 2:
+                fracs_v = fracoes_raw[frames_ignorar:]
+                t_v     = [tt - tempos_raw[frames_ignorar] for tt in tempos_raw[frames_ignorar:]]
+                alts_v  = normalizar_alturas(fracs_v, float(z0))
+                fig_lv  = go.Figure(go.Scatter(
+                    x=t_v, y=alts_v, mode="lines",
+                    line=dict(color="royalblue", width=2),
+                ))
+                fig_lv.update_layout(
+                    xaxis_title="Tempo (s)", yaxis_title="z (cm)",
+                    xaxis=dict(range=[0, max(t_v)]),
+                    yaxis=dict(range=[0, float(z0) * 1.10]),
+                    height=400, margin=dict(l=60, r=20, t=20, b=50),
+                )
+                plot_live.plotly_chart(fig_lv, use_container_width=True, key=f"lv_{step}")
 
-        # Curva ao vivo (após ignorar frames iniciais)
-        if len(fracoes_raw) > frames_ignorar + 2:
-            fracs_v = fracoes_raw[frames_ignorar:]
-            t_v     = [tt - tempos_raw[frames_ignorar] for tt in tempos_raw[frames_ignorar:]]
-            alts_v  = normalizar_alturas(fracs_v, float(z0))
-            fig_lv  = go.Figure(go.Scatter(
-                x=t_v, y=alts_v,
-                mode="lines+markers",
-                line=dict(color="royalblue", width=1.5),
-                marker=dict(size=3),
-            ))
-            fig_lv.update_layout(
-                xaxis_title="Tempo (s)", yaxis_title="z (cm)",
-                xaxis=dict(range=[0, max(t_v)]),
-                yaxis=dict(range=[0, float(z0) * 1.10]),
-                height=400,
-                margin=dict(l=60, r=20, t=20, b=50),
-            )
-            plot_live.plotly_chart(fig_lv, use_container_width=True, key=f"lv_{step}")
+            prog.progress((step + 1) / n_steps)
+            stat.text(f"Processando: {step+1}/{n_steps} frames · t = {t:.1f} s")
+            next_target_i += 1
 
-        prog.progress((step + 1) / n_steps)
-        stat.text(f"Processando: {step+1}/{n_steps} frames · t = {t:.1f} s")
+        cur_frame += 1
 
     cap_proc.release()
 
