@@ -9,6 +9,7 @@ preservando integralmente os pontos da zona não-linear/compressão.
 
 import io
 import os
+import shutil
 import tempfile
 
 import cv2
@@ -155,8 +156,9 @@ if video_file is None:
     st.stop()
 
 # ── Salvar vídeo ──────────────────────────────────────────────────────────────
-file_bytes = video_file.read()
-file_hash  = hash(file_bytes[:8192])
+# Identifica o arquivo por nome+tamanho (sem ler tudo na RAM) e grava em disco
+# em blocos, evitando segurar uma cópia inteira do vídeo na memória.
+file_hash = hash((video_file.name, video_file.size))
 
 if file_hash != st.session_state.video_hash:
     st.session_state.results    = None
@@ -167,8 +169,9 @@ if file_hash != st.session_state.video_hash:
             os.unlink(old)
         except Exception:
             pass
+    video_file.seek(0)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as f:
-        f.write(file_bytes)
+        shutil.copyfileobj(video_file, f, length=4 * 1024 * 1024)  # blocos de 4 MB
         st.session_state.video_path = f.name
 
 video_path = st.session_state.video_path
